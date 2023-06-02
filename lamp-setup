@@ -1,0 +1,692 @@
+#!/bin/bash
+# LAMP Instalation script for Debian Based OS
+#
+#Instalation script to help with LAMP
+#[Linux Apache2 MySql PHP]
+# Loosely based on raspi-config
+
+#
+# functions copied over from raspi-config
+#
+
+#
+#calc_wt_size -- Automatically caculate whiptail box siz
+#
+
+calc_wt_size() {
+  # NOTE: it's tempting to redirect stderr to /dev/null, so supress error 
+  # output from tput. However in this case, tput detects neither stdout or 
+  # stderr is a tty and so only gives default 80, 24 values
+  WT_HEIGHT=18
+  WT_WIDTH=$(tput cols)
+
+  if [ -z "$WT_WIDTH" ] || [ "$WT_WIDTH" -lt 60 ]; then
+    WT_WIDTH=80
+  fi
+  if [ "$WT_WIDTH" -gt 178 ]; then
+    WT_WIDTH=120
+  fi
+  WT_MENU_HEIGHT=$(($WT_HEIGHT-7))
+}
+#
+#Interractive section
+#
+
+INTERACTIVE=True
+ASK_TO_REBOOT=0
+BLACKLIST=/etc/modprobe.d/raspi-blacklist.conf
+
+
+#
+#End of raspi-config functions/sections
+#
+
+#do_about
+do_about() {
+  whiptail --msgbox "\
+This tool provides a straightforward way of installing a LAMP [Linux, Apache, MariaDB, Php] web server for a Debian based OS. This will help you in creating interactive webpages in a developement  enviroment. \
+" 20 70 1
+}
+#do_tutorial
+do_tutorial(){
+	whiptail --msgbox "\
+Use of this tool consists of going down the list from upgrading your repositorys to installing apache2 etc.. If you want to add menu items to any menu item look at the do_menu function. For example to add more programs to the extra menu look for do_extra_menu function these menus and such use the program whiptail to produce menu boxes and the like. The functions are called out by do_something(){ some code here} the numbers at the end describe the size of the box  \
+" 20 70 1
+	}
+
+# Update and Upgrade Dist
+do_upgrade() {
+	sudo apt-get update
+	sudo apt-get upgrade
+return 0
+}
+## Start of apache2 menu items
+
+#do_a2ensite
+do_a2ensite() {
+	cd /etc/apache2/sites-available
+File=( $(ls) )
+count=( $(ls | wc -l) )
+s_file=( $(for (( i=0; i<=(count - 1); i++ ))
+do
+printf '%s %s \n' $i ${File[$i]} | sort -u 
+done
+))
+
+FUN=$(whiptail  --title "Enable Website" --menu "a2ensite" $WT_HEIGHT $WT_WIDTH $WT_MENU_HEIGHT  "${s_file[@]}" 3>&1 1>&2 2>&3)
+RET=$?
+    if [ $RET -eq 1 ]; then
+     do_apache_menu
+    elif [ $RET -eq 0 ]; then
+     for i in ${FUN[@]}
+      do
+       sudo a2ensite ${File[$i]}
+      done
+    fi
+sudo systemctl reload apache2
+do_apache_menu
+	}
+#do_a2dissite
+do_a2dissite(){
+	cd /etc/apache2/sites-available
+File=( $(ls) )
+count=( $(ls | wc -l) )
+s_file=( $(for (( i=0; i<=(count - 1); i++ ))
+do
+printf '%s %s \n' $i ${File[$i]} | sort -u 
+done
+))
+
+FUN=$(whiptail  --title "Disable Website" --menu "a2dissite" $WT_HEIGHT $WT_WIDTH $WT_MENU_HEIGHT  "${s_file[@]}" 3>&1 1>&2 2>&3)
+RET=$?
+    if [ $RET -eq 1 ]; then
+     do_apache_menu
+    elif [ $RET -eq 0 ]; then
+     for i in ${FUN[@]}
+      do
+       sudo a2dissite ${File[$i]}
+      done
+    fi
+sudo systemctl reload apache2
+do_apache_menu
+	}
+#do_apache
+do_apache() {
+	sudo apt install apache2 -y
+	sudo chmod -R 777 /var/www/
+	whiptail --msgbox "Apache web server has been successfully installed and /var/www/ has been set to permisions rwx rwx rwx or 777. \n You can access the default page of apache by typing http://localhost or http://127.0.0.1 into your browser."
+	do_apache_menu
+	}
+
+#do_site_create
+do_site_create(){
+	SITE=$(whiptail --inputbox "Enter the name of your site" $WT_HEIGHT $WT_WIDTH $WT_MENU_HEIGHT 3>&1 1>&2 2>&3)
+	sudo cp /etc/apache2/sites-available/000-default.conf /etc/apache2/sites-available/$SITE.conf
+	RET=$?
+	if [ $RET -eq 0 ]; then
+	whiptail --yesno "You have succesfully created a config file for $SITE. You will need to edit the config file in order to be useful. Would you like to configure $SITE.conf?" 20 60 1
+	fi
+	Ret=$?
+	if [ $Ret -eq 0 ]; then
+	sudo nano /etc/apache2/sites-available/$SITE.conf
+        do_apache_menu
+	elif [ $Ret -eq 1 ]; then
+	whiptail --msgbox "You can edit this file later on by selecting Option B2 from the Virtual Hosts Config Menu and selecting the file from the list." 20 60 1
+	do_vhost_config
+	fi
+
+	}
+	
+#do_site_config
+do_site_config(){
+	cd /etc/apache2/sites-available
+File=( $(ls) )
+count=( $(ls | wc -l) )
+s_file=( $(for (( i=0; i<=(count - 1); i++ ))
+do
+printf '%s %s \n' $i ${File[$i]} | sort -u 
+done
+))
+
+FUN=$(whiptail  --title "Edit VirtualHosts" --menu "VirtualHosts config" $WT_HEIGHT $WT_WIDTH $WT_MENU_HEIGHT  "${s_file[@]}" 3>&1 1>&2 2>&3)
+RET=$?
+    if [ $RET -eq 1 ]; then
+     do_vhost_config
+    elif [ $RET -eq 0 ]; then
+     for i in ${FUN[@]}
+      do
+       sudo nano ${File[$i]}
+       do_vhost_config
+      done
+    fi
+
+	}	
+#do_vhost_config
+do_vhost_config() {
+	FUN=$(whiptail --title "LAMP SetUp tool (lamp-setup) -- VirtualHost Config" --menu "VirtualHost Config" $WT_HEIGHT $WT_WIDTH $WT_MENU_HEIGHT --cancel-button Back --ok-button Select \
+    "B1 Create VirtualHost File" "Create a VirtualHost file for your websites" \
+    "B2 Edit VirtualHost File" "Edit an apache VirtualHost config file " \
+    3>&1 1>&2 2>&3)
+	
+	RET=$?
+    if [ $RET -eq 1 ]; then
+    do_apache_menu
+     elif [ $RET -eq 0 ]; then
+    case "$FUN" in
+      B1\ *) do_site_create ;;
+      B2\ *) do_site_config ;;
+      *) whiptail --msgbox "Programmer error: unrecognized option" 20 60 1 ;;
+    esac || whiptail --msgbox "There was an error running option $FUN"
+    fi
+	}
+	
+# do_apache_menu
+do_apache_menu() {
+	FUN=$(whiptail --title "LAMP SetUp tool (lamp-setup) -- Apache2 install" --menu "Apache2 install" $WT_HEIGHT $WT_WIDTH $WT_MENU_HEIGHT --cancel-button Back --ok-button Select \
+    "A1 Apache2" "Install Apache2" \
+    "A2 VirtualHost Config" "Create and edit an apache VirtualHost config file " \
+    "A3 Enable website" "Enable website config from /etc/apache2/sites-advailable" \
+    "A4 Disable website" "Disable website config from /etc/apache2/sites-advailable" \
+    3>&1 1>&2 2>&3)
+  RET=$?
+  if [ $RET -eq 1 ]; then
+    return 0
+  elif [ $RET -eq 0 ]; then
+    case "$FUN" in
+      A1\ *) do_apache ;;
+      A2\ *) do_vhost_config ;;
+      A3\ *) do_a2ensite ;;
+      A4\ *) do_a2dissite ;;
+      *) whiptail --msgbox "Programmer error: unrecognized option" 20 60 1 ;;
+    esac || whiptail --msgbox "There was an error running option $FUN" 20 60 1
+  fi
+}
+#
+# MySql menu
+#
+
+#do_mysql
+do_mysql(){
+	sudo apt install mariadb-server php-mysql -y
+	RET=$?
+	if [ $RET -eq 0 ]; then
+	whiptail --msgbox "You have succesfully installed MariaDB. Apache service will now restart" 20 60 1
+	fi
+	sudo service apache2 restart
+	do_maria_menu
+	}
+#do_mysql_secure
+do_mysql_secure(){
+	sudo mysql_secure_installation
+	RET=$?
+	if [ $RET -eq 0 ]; then
+	whiptail --msgbox "You have succesfully secured your MariaDB Installation. Apache service will now restart" 20 60 1
+	fi
+	sudo service apache2 restart
+	do_maria_menu
+	}
+#do_create_user
+do_create_user(){
+    USER=$(whiptail --inputbox "What is the name of the new database user?" $WT_HEIGHT $WT_WIDTH 3>&1 1>&2 2>&3)
+   PASS=$(whiptail --passwordbox "What is the password for $USER?" $WT_HEIGHT $WT_WIDTH 3>&1 1>&2 2>&3)
+    whiptail --msgbox "This will be a function in the near future. \n For now type your password for root that you set up in mysql_secure_installation after logging into mysql with \n mysql -u root -p \n Copy these commands into the prompt one at a time \n CREATE USER '$USER'@localhost IDENTIFIED BY '$PASS';  \n GRANT ALL PRIVILEGES ON *.* TO '$USER'@localhost IDENTIFIED BY '$PASS'; \n  FLUSH PRIVILEGES; \n exit "  $WT_HEIGHT $WT_WIDTH $WT_MENU_HEIGHT
+#  USER=$(whiptail --inputbox "What is the name of the new database user?" $WT_HEIGHT $WT_WIDTH $WT_MENU_HEIGHT 3>&1 1>&2 2>&3)
+ #  PASS=$(whiptail --passwordbox "What is the password for $USER?" $WT_HEIGHT $WT_WIDTH $WT_MENU_HEIGHT 3>&1 1>&2 2>&3)
+#CREATE USER '$USER'@localhost IDENTIFIED BY '$PASS';
+#GRANT ALL PRIVILEGES ON *.* TO '$USER'@localhost IDENTIFIED BY '$PASS';
+#FLUSH PRIVILEGES;
+#exit
+do_maria_menu
+    }
+
+#do_maria_menu
+do_maria_menu() {
+	FUN=$(whiptail --title "LAMP SetUp tool (lamp-setup) MairaDB install" --menu "MariaDB install" $WT_HEIGHT $WT_WIDTH $WT_MENU_HEIGHT --cancel-button Back --ok-button Select \
+    "C1 MariaDB" "Install MariaDB server" \
+    "C2 Security" "Run mysql_secure_installation " \
+    "C3 Create User" "Create database user" 3>&1 1>&2 2>&3)
+  RET=$?
+  if [ $RET -eq 1 ]; then
+    return 0
+  elif [ $RET -eq 0 ]; then
+    case "$FUN" in
+      C1\ *) do_mysql ;;
+      C2\ *) do_mysql_secure ;;
+      C3\ *) do_create_user ;;
+      *) whiptail --msgbox "Programmer error: unrecognized option" 20 60 1 ;;
+    esac || whiptail --msgbox "There was an error running option $FUN" 20 60 1
+  fi
+}
+# do_php
+do_php(){
+        sudo apt install php -y
+	whiptail --yesno "You have successfully installed php. Would you like to create a info.php file to display information about your installation from http://localhost/info.php?" 20 60 1
+	RET=$?
+	if [ $RET -eq 1 ]; then
+	return 0
+	else
+	sudo touch /var/www/html/info.php
+	echo "<?php phpinfo(); ?>" > /var/www/html/info.php
+	fi
+	return 0
+	}
+
+# do_edit_apache will make a backup of apache2.conf if it doesn't exist 
+do_edit_apache(){
+	cd /etc/apache2
+	if [ -f apache2.bak ]; then
+	   sudo nano apache2.conf
+    else
+       sudo cp apache2.conf apache2.bak
+       sudo nano apache2.conf
+    fi  
+  do_
+	}
+
+# do_edit_php will create a backup of php.ini if it doesn't exist
+# before editing
+do_edit_php(){
+	cd /etc/php/*.*/cli
+	if [ -f php.bak ]; then
+       sudo nano php.ini
+   else
+       sudo cp php.ini php.bak
+       sudo nano php.ini
+    fi
+return 0
+	}
+
+# do_edit_mysql
+do_edit_mysql(){
+	cd /etc/mysql
+	if [ -f my.bak ]; then
+       sudo nano my.cnf
+   else
+       sudo cp my.cnf my.bak
+       sudo nano my.cnf
+    fi
+	
+	return 0
+	}
+
+#do_backup_all
+#will create backups of current or default configs
+
+#do_backup_apache
+# will create apache2.bak [default] if not exist
+do_backup_apache(){
+    cd /etc/apache2
+fl_date=$(date +%m-%d-%y.%H:%M:%S)
+file=$fl_date.bak
+if [ -f apache2.bak ]; then
+	   sudo cp apache2.conf $file 
+    else 
+      sudo cp apache2.conf apache2.bak
+       
+    fi
+do_config_backup
+    }
+    
+#do_backup_php
+#will create php.bak [default] if not exist
+do_backup_php(){
+cd /etc/php/*.*/cli
+fl_date=$(date +%m-%d-%y.%H:%M:%S)
+file=$fl_date.bak
+	if [ -f php.bak ]; then
+       sudo cp php.ini $file
+   else
+       sudo cp php.ini php.bak
+       
+    fi
+    do_config_backup
+}
+
+#do_mysql_backup
+# will create mysql.bak [default] if not exist
+do_backup_mysql(){
+    cd /etc/mysql
+    fl_date=$(date +%m-%d-%y.%H:%M:%S)
+file=$fl_date.bak
+	if [ -f my.bak ]; then
+       sudo cp my.cnf $file
+   else
+       sudo cp my.cnf my.bak
+    fi
+do_config_backup
+    }
+#do_config_backup
+do_config_backup(){
+	FUN=$(whiptail --title "LAMP [webserver] setup tool (Lamp-Setup) -- Config Backup Options" --menu "Backup your Configs" $WT_HEIGHT $WT_WIDTH $WT_MENU_HEIGHT --cancel-button Finish --ok-button Select \
+        "E1 Apache2 Backup" "Backup current config file for apache2" \
+        "E2 PHP Backup" "Backup current config file for PHP" \
+        "E3 MySql Backup" "Backup current config file for MariaDB" \
+         3>&1 1>&2 2>&3)
+    RET=$?
+    if [ $RET -eq 1 ]; then
+      do_config_menu
+    elif [ $RET -eq 0 ]; then
+      case "$FUN" in
+        E1\ *) do_backup_apache ;;
+        E2\ *) do_backup_php ;;
+        E3\ *) do_backup_mysql ;;
+        *) whiptail --msgbox "Programmer error: unrecognized option" 20 60 1 ;;
+      esac || whiptail --msgbox "There was an error running option $FUN" 20 60 1
+    else
+      exit 1
+    fi
+	
+	}
+#do_restore_apache
+# will restore default or dated backup
+do_restore_apache(){
+    whiptail --msgbox "The default backup for apache2 has been named apache.bak. \n Please select it if you want to go to the default config for Apache [Fresh Install]. \n Note:This just resets the server config not your websites etc... " 0 0
+cd /etc/apache2
+count=( $(ls *.bak | wc -l) )
+if [ $count -eq 0 ]; then
+whiptail --msgbox "There are no backup files to restore.Taking you back to the restore menu" 0 0 
+do_config_restore
+fi
+File=( $(ls *.bak) )
+s_file=( $(for (( i=0; i<=(count -1); i++ ))
+do
+printf '%s %s \n' $i ${File[$i]} | sort -u
+done
+))
+if [ $count -gt 1 ]; then
+
+FUN=$(whiptail  --title "Restore Apache2 Config" --menu "Restore config from Backup" $WT_HEIGHT $WT_WIDTH $WT_MENU_HEIGHT "${s_file[@]}" 3>&1 1>&2 2>&3)
+else
+FUN=$(whiptail  --title "Restore Apache2" --menu "Restore config from backup" $WT_HEIGHT $WT_WIDTH $WT_MENU_HEIGHT "0" "${File[@]}" 3>&1 1>&2 2>&3)
+fi
+RET=$?
+    if [ $RET -eq 1 ]; then
+     do_config_restore
+    elif [ $RET -eq 0 ]; then
+     for i in ${FUN[@]}
+      do
+       sudo cp ${File[$i]} apache2.conf
+      done
+    fi
+
+do_config_restore
+    }
+#do_restore_php
+do_restore_php(){
+     whiptail --msgbox "The default backup for php has been named php.bak. \n Please select it if you want to go to the default config for PHP [Fresh Install]. \n Note:This just resets the php config to an out of box install " 0 0
+    cd /etc/php/*.*/cli
+   count=( $(ls *.bak | wc -l) )
+   if [ $count -eq 0 ]; then
+whiptail --msgbox "There are no backup files to restore. Taking you back to restore menu." 0 0 
+do_config_restore
+fi 
+File=( $(ls *.bak) )
+s_file=( $(for (( i=0; i<=(count -1); i++ ))
+do
+printf '%s %s \n' $i ${File[$i]} | sort -u
+done
+))
+if [ $count -gt 1 ]; then
+
+FUN=$(whiptail  --title "Edit VirtualHosts" --menu "Restore Backup" $WT_HEIGHT $WT_WIDTH $WT_MENU_HEIGHT "${s_file[@]}" 3>&1 1>&2 2>&3)
+
+else 
+
+FUN=$(whiptail  --title "Edit VirtualHosts" --menu "VirtualHosts config" $WT_HEIGHT $WT_WIDTH $WT_MENU_HEIGHT "0" "${File[@]}" 3>&1 1>&2 2>&3)
+
+fi
+RET=$?
+    if [ $RET -eq 1 ]; then
+     do_config_restore
+    elif [ $RET -eq 0 ]; then
+     for i in ${FUN[@]}
+      do
+       sudo cp ${File[$i]} php.ini
+      done
+    fi 
+    do_config_restore
+    }
+#do_restore_mysql
+do_restore_mysql(){
+    cd /etc/mysql
+    count=( $(ls *.bak | wc -l) )
+    if [ $count -eq 0 ]; then
+whiptail --msgbox "There are no backup files to restore. Taking you back to restore menu." 0 0 
+do_config_restore
+fi
+File=( $(ls *.bak) )
+s_file=( $(for (( i=0; i<=(count -1); i++ ))
+do
+printf '%s %s \n' $i ${File[$i]} | sort -u
+done
+))
+if [ $count -gt 1 ]; then
+
+FUN=$(whiptail  --title "Edit VirtualHosts" --menu "Restore Backup" $WT_HEIGHT $WT_WIDTH $WT_MENU_HEIGHT "${s_file[@]}" 3>&1 1>&2 2>&3)
+
+else 
+
+FUN=$(whiptail  --title "Edit VirtualHosts" --menu "VirtualHosts config" $WT_HEIGHT $WT_WIDTH $WT_MENU_HEIGHT "0" "${File[@]}" 3>&1 1>&2 2>&3)
+
+fi
+RET=$?
+    if [ $RET -eq 1 ]; then
+     do_config_restore
+    elif [ $RET -eq 0 ]; then
+     for i in ${FUN[@]}
+      do
+       sudo cp ${File[$i]} my.cnf
+      done
+    fi
+    do_config_restore
+    }
+#do_restore_all
+do_restore_all(){
+#restore default apache2 config [apache2.bak]
+    apache=( $(ls /etc/apache2/apache2.bak))
+    ap_ret=$?
+    if [ $ap_ret -eq 2 ]; then
+    whiptail --msgbox "The default backup was not found. \n Either you never edited the file /etc/apache2/apache2.conf \n or ran the backup option D4 from the config menu. Continuing on." 0 0
+    
+    else 
+    sudo cp /etc/apache2/apache2.bak apache2.conf
+    fi
+    
+    php=( $(ls /etc/php/*.*/cli/php.bak))
+    php_ret=$?
+    if [ $php_ret -eq 2 ]; then
+    whiptail --msgbox "The default backup was not found. \n Either you never edited the file /etc/php/*.*/cli/php.ini \n or ran the backup option D4 from the config menu. Continuing on." 0 0
+    else
+    sudo cp /etc/php/*.*/cli/php.bak php.ini
+    fi
+    
+    mysql=( $(ls /etc/mysql/my.bak))
+    my_ret=$?
+    if [ $my_ret -eq 2 ]; then
+    whiptail --msgbox "The default backup was not found. \n Either you never edited the file  \n or ran the backup option from the config menu for /etc/mysql/my.cnf. Continuing on." 0 0
+    else
+    sudo cp /etc/mysql/my.bak my.cnf
+    fi
+do_config_restore
+    }
+#do_config_restore
+do_config_restore(){
+	FUN=$(whiptail --title "LAMP [webserver] setup tool (Lamp-Setup) -- Config Options" --menu "Restore Configs from backups" $WT_HEIGHT $WT_WIDTH $WT_MENU_HEIGHT --cancel-button Finish --ok-button Select \
+        "F1 Apache2 Config" "Restore config file for apache2" \
+        "F2 PHP Config" "Restore config file for PHP" \
+        "F3 MySql Config" "Restore config file for MariaDB" \
+        "F4 Restore All" "Restore all of your config files to default" \
+         3>&1 1>&2 2>&3)
+    RET=$?
+    if [ $RET -eq 1 ]; then
+      do_config_menu
+    elif [ $RET -eq 0 ]; then
+      case "$FUN" in
+        F1\ *) do_restore_apache ;;
+        F2\ *) do_restore_php ;;
+        F3\ *) do_restore_mysql ;;
+        F4\ *) do_restore_all ;;
+        *) whiptail --msgbox "Programmer error: unrecognized option" 20 60 1 ;;
+      esac || whiptail --msgbox "There was an error running option $FUN" 20 60 1
+    else
+      exit 1
+    fi
+	return 0
+	}
+#do_config_menu
+do_config_menu(){
+	FUN=$(whiptail --title "LAMP [webserver] setup tool (Lamp-Setup) -- Config Options" --menu "Config Options" $WT_HEIGHT $WT_WIDTH $WT_MENU_HEIGHT --cancel-button Finish --ok-button Select \
+        "D1 Apache2 Config" "Edit main config file for apache2" \
+        "D2 PHP Config" "Edit main config file for PHP" \
+        "D3 MySql Config" "Edit main config file for MariaDB" \
+        "D4 Backup" "Make backups of your config files" \
+        "D5 Restore" "Restore config files from a list of backups." \
+        3>&1 1>&2 2>&3)
+    RET=$?
+    if [ $RET -eq 1 ]; then
+      return 0
+    elif [ $RET -eq 0 ]; then
+      case "$FUN" in
+        D1\ *) do_edit_apache ;;
+        D2\ *) do_edit_php ;;
+        D3\ *) do_edit_mysql ;;
+        D4\ *) do_config_backup ;;
+        D5\ *) do_config_restore ;;
+        *) whiptail --msgbox "Programmer error: unrecognized option" 20 60 1 ;;
+      esac || whiptail --msgbox "There was an error running option $FUN" 20 60 1
+    else
+      exit 1
+    fi
+  
+	}
+#do_phpmyadmin
+do_phpmyadmin(){
+    sudo apt install phpmyadmin
+    RET=$?
+	if [ $RET -eq 0 ]; then
+	whiptail --msgbox "You have succesfully installed PhpMyadmin. A symbolic link will be created so you can access phpmyadmin from http://localhost/phpmyadmin" 20 60 1
+	fi
+    ln -s /usr/share/phpmyadmin /var/www/html
+   do_extra_menu
+    }
+
+#do_bluefish
+do_bluefish(){
+    sudo apt-get install bluefish
+    RET=$?
+	if [ $RET -eq 0 ]; then
+	whiptail --msgbox "You have succesfully installed BlueFish. You can access it from the Menu->Programming->BlueFish" 20 60 1
+	fi
+    do_extra_menu
+    }
+
+#do_filezilla
+do_filezilla(){
+    sudo apt-get install filezilla
+    RET=$?
+	if [ $RET -eq 0 ]; then
+	whiptail --msgbox "You have succesfully installed FileZilla. You can access it by Selecting it from Menu->Internet->FileZilla" 20 60 1
+	fi
+    do_extra_menu
+    }
+
+#do_gimp
+do_gimp(){
+    sudo apt-get install gimp
+    RET=$?
+	if [ $RET -eq 0 ]; then
+	whiptail --msgbox "You have succesfully installed GIMP. You can access it by Selecting it from Menu->Graphics->GIMP" 20 60 1
+	fi
+    do_extra_menu
+    }
+
+#do_inkscape
+do_inkscape(){
+    sudo apt-get install inkscape
+    RET=$?
+	if [ $RET -eq 0 ]; then
+	whiptail --msgbox "You have succesfully installed InkScape. You can access it by Selecting it from Menu->Graphics->InkScape" 20 60 1
+	fi
+    do_extra_menu
+    }
+#do_geany
+do_geany(){
+	sudo apt-get install geany
+	RET=$?
+	if [ $RET -eq 0 ]; then
+	whiptail --msgbox "You have succesfully installed Geany. You can access it by Selecting it from Menu->Developement->Geany" 20 60 1
+	fi
+	do_extra_menu
+	}
+	
+#do_extra_menu
+do_extra_menu(){
+	FUN=$(whiptail --title "LAMP [webserver] setup tool (Lamp-Setup) -- Extra Software" --menu "Extra Software" $WT_HEIGHT $WT_WIDTH $WT_MENU_HEIGHT --cancel-button Finish --ok-button Select \
+        "G1 PhpMyAdmin" "Install PhpMyAdmin  [DB management written in php to manage your databases]" \
+        "G2 Bluefish" "Install Bluefish [IDE for developing websites similar to Geany]" \
+        "G3 Fielzilla" "Install Filezilla [FTP program to upload websites]" \
+        "G4 Gimp" "Install Gimp [Image Editor]" \
+        "G5 Inkscape" "Install Inkscape [SVG (Scalable Vector Graphic) Creator/Editor]" \
+        "G6 Geany" "Install Geany [Note: You might already have Geany installed.]" \
+        3>&1 1>&2 2>&3)
+    RET=$?
+    if [ $RET -eq 1 ]; then
+      return 0
+    elif [ $RET -eq 0 ]; then
+      case "$FUN" in
+        G1\ *) do_phpmyadmin ;;
+        G2\ *) do_bluefish ;;
+        G3\ *) do_filezilla ;;
+        G4\ *) do_gimp ;;
+        G5\ *) do_inkscape ;;
+        G6\ *) do_geany ;;
+        *) whiptail --msgbox "Programmer error: unrecognized option" 20 60 1 ;;
+      esac || whiptail --msgbox "There was an error running option $FUN" 20 60 1
+    else
+      exit 1
+    fi
+  
+	}			
+
+#
+# Interactive use loop
+#
+if [ "$INTERACTIVE" = True ]; then
+  [ -e $CONFIG ] || touch $CONFIG
+  calc_wt_size
+  while [ "$USER" = "root" ] || [ -z "$USER" ]; do
+    if ! USER=$(whiptail --inputbox "Lamp-Setup could not determine the default user.\\n\\nWhat user should these settings apply to?" 20 60 pi 3>&1 1>&2 2>&3); then
+      return 0
+    fi
+  done
+  while true; do
+      FUN=$(whiptail --title "LAMP [webserver] setup tool (Lamp-Setup)" --menu "Setup Options" $WT_HEIGHT $WT_WIDTH $WT_MENU_HEIGHT --cancel-button Finish --ok-button Select \
+        "1 Update" "Update Repositorys and Upgrade Software" \
+        "2 Apache2" "Install apache2" \
+        "3 MySql" "Install MariaDB [Substitute for MySql]" \
+        "4 PHP" "Install PHP" \
+        "5 Config Options" "Configure settings for Apache MySql and PHP" \
+        "6 Extras" "Install extra useful Software such as PhpMyadmin " \
+        "7 About Lamp-Setup" "Information about this tool" \
+        "8 Tutorial" "Basic tutorial for using this tool." \
+        3>&1 1>&2 2>&3)
+    RET=$?
+    if [ $RET -eq 1 ]; then
+      exit 0
+    elif [ $RET -eq 0 ]; then
+      case "$FUN" in
+        1\ *) do_upgrade ;;
+        2\ *) do_apache_menu ;;
+        3\ *) do_maria_menu ;;
+        4\ *) do_php ;;
+        5\ *) do_config_menu ;;
+        6\ *) do_extra_menu ;;
+        7\ *) do_about ;;
+        8\ *) do_tutorial ;;
+        *) whiptail --msgbox "Programmer error: unrecognized option" 20 60 1 ;;
+      esac || whiptail --msgbox "There was an error running option $FUN" 20 60 1
+    else
+      exit 1
+    fi
+  done
+fi
