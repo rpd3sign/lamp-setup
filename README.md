@@ -36,3 +36,6 @@ If you want to make this advailable to the current logged in user type
 `cp lamp-setup /usr/bin`
 and run it in a terminal with
 `lamp-setup`
+# Donations
+If you find this tool useful please consider donating to my PayPal account
+[Donate here](https://www.paypal.com/donate/?hosted_button_id=9NT268X9WXQNU "PayPal donation page")
