@@ -3,11 +3,11 @@ This is a simple setup script using whiplash to display comands in a menu type s
 Debian based sytems.
 # Screenshots
 ## Main Screen
-![Main menu](/docs/images/main.png)
+![Main menu](/doc/images/main.png)
 ## Apache Setup
-![Apache menu](/docs/images/apache.png)
+![Apache menu](/doc/images/apache.png)
 ## MySql
-![Mysql Menu](/docs/images/mysql.png)
+![Mysql Menu](/doc/images/mysql.png)
 ## Extras
 ![Extras menu](/doc/images/extra.png)
 # Usage
