@@ -8,6 +8,8 @@ Debian based sytems.
 ![Apache menu](/doc/images/apache.png)
 ## MySql
 ![Mysql Menu](/doc/images/mysql.png)
+## Config
+![Config Menu](/doc/images/config.png)
 ## Extras
 ![Extras menu](/doc/images/extra.png)
 # Usage
