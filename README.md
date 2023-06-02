@@ -3,13 +3,13 @@ This is a simple setup script using whiplash to display comands in a menu type s
 Debian based sytems.
 # Screenshots
 ## Main Screen
-![Main menu](/docs/images/main.png)
+![Main menu](main.png)
 ## Apache Setup
-![Apache menu](/docs/images/apache.png)
+![Apache menu](apache.png)
 ## MySql
-![Mysql Menu](/docs/images/mysql.png)
+![Mysql Menu](mysql.png)
 ## Extras
-![Extras menu](/doc/images/extra.png)
+![Extras menu](extra.png)
 # Usage
 To use this repository download the code from this repository and run lamp-setup by typing in 
 `./lamp-setup`
