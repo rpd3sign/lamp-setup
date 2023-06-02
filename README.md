@@ -1,6 +1,6 @@
 # lamp-setup
 This is a simple setup script using whiplash to display comands in a menu type seting to install a LAMP server on 
-Debian based sytems.
+Debian based sytems. I created this setup script to simplify setting up  a web server on my Linux machines. In the past I had to manualy look up tutorials on how to set up a LAMP web server every single time I wanted to create a development enviroment to test out my website designs before uploading to my hosting companys. I thought there was a simpler way, and looking at the raspi-config code used in Raspbian OS I found my answer. Using whiplash and bash scripting I created this setup tool.
 # Screenshots
 ## Main Screen
 ![Main menu](/doc/images/main.png)
